@@ -1,0 +1,29 @@
+# Core audio processing
+numpy>=1.24.0
+sounddevice>=0.4.6
+
+# Voice Activity Detection
+silero-vad>=5.1
+
+# Speech Recognition (ASR)
+vosk>=0.3.45
+
+# Text-to-Speech
+piper-tts>=1.2.0
+
+# GUI
+PyQt6>=6.5.0
+
+# Audio processing utilities
+librosa>=0.10.0
+scipy>=1.11.0
+
+# ONNX Runtime for model inference
+onnxruntime>=1.16.0
+
+# Packaging
+pyinstaller>=6.0.0
+
+# Development dependencies
+pytest>=7.4.0
+pytest-cov>=4.1.0
