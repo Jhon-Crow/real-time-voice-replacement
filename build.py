@@ -52,6 +52,7 @@ ICON_PATH = "assets/icon.ico"  # Optional icon
 ROOT_DIR = Path(__file__).parent
 DIST_DIR = ROOT_DIR / "dist"
 BUILD_DIR = ROOT_DIR / "build"
+HOOKS_DIR = ROOT_DIR / "pyinstaller_hooks"
 
 
 def clean():
@@ -108,9 +109,23 @@ def build_exe():
         "--hidden-import=PyQt6.QtWidgets",
         "--hidden-import=PyQt6.QtCore",
         "--hidden-import=PyQt6.QtGui",
+        # Hidden imports for voice_replacer package modules
+        "--hidden-import=voice_replacer",
+        "--hidden-import=voice_replacer.config",
+        "--hidden-import=voice_replacer.gui",
+        "--hidden-import=voice_replacer.audio_capture",
+        "--hidden-import=voice_replacer.audio_output",
+        "--hidden-import=voice_replacer.asr",
+        "--hidden-import=voice_replacer.tts",
+        "--hidden-import=voice_replacer.vad",
+        "--hidden-import=voice_replacer.pipeline",
         # Collect data files
         "--collect-data=vosk",
         "--collect-data=piper_phonemize",
+        # Add custom hooks directory for voice_replacer package
+        f"--additional-hooks-dir={HOOKS_DIR}",
+        # Add runtime hook to set up paths before imports
+        f"--runtime-hook={HOOKS_DIR / 'rthook_voice_replacer.py'}",
         # Exclude unnecessary modules to reduce size
         "--exclude-module=matplotlib",
         "--exclude-module=tkinter",
