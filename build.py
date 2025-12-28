@@ -6,6 +6,13 @@ Creates a single .exe file using PyInstaller that bundles:
 - Python runtime
 - All dependencies
 - Voice models (optional, can be downloaded on first run)
+
+Usage:
+    python build.py              # Build exe and create installer
+    python build.py --clean      # Clean build directories
+    python build.py --no-installer  # Skip installer creation
+
+Works on both local development and GitHub Actions CI.
 """
 import os
 import sys
@@ -13,9 +20,31 @@ import shutil
 import subprocess
 from pathlib import Path
 
+# Try to read version from pyproject.toml
+def get_version():
+    """Get version from pyproject.toml."""
+    pyproject_path = Path(__file__).parent / "pyproject.toml"
+    if pyproject_path.exists():
+        try:
+            import tomllib
+            with open(pyproject_path, "rb") as f:
+                data = tomllib.load(f)
+                return data.get("project", {}).get("version", "0.1.0")
+        except (ImportError, KeyError):
+            pass
+        # Fallback for Python < 3.11
+        try:
+            import tomli
+            with open(pyproject_path, "rb") as f:
+                data = tomli.load(f)
+                return data.get("project", {}).get("version", "0.1.0")
+        except (ImportError, KeyError):
+            pass
+    return "0.1.0"
+
 # Build configuration
 APP_NAME = "VoiceReplacer"
-APP_VERSION = "0.1.0"
+APP_VERSION = get_version()
 ENTRY_POINT = "src/voice_replacer/__main__.py"
 ICON_PATH = "assets/icon.ico"  # Optional icon
 
@@ -118,15 +147,46 @@ def build_exe():
 
 
 def create_installer():
-    """Create an installer using NSIS (optional)."""
+    """Create an installer using Inno Setup or NSIS."""
     print("Creating installer...")
 
-    # Check for NSIS
+    # Check for Inno Setup first (preferred)
+    iscc_path = shutil.which("iscc") or shutil.which("ISCC")
+    if iscc_path:
+        return create_inno_installer(iscc_path)
+
+    # Fallback to NSIS
     nsis_path = shutil.which("makensis")
-    if not nsis_path:
-        print("NSIS not found. Skipping installer creation.")
-        print("Install NSIS from https://nsis.sourceforge.io/ to create installers.")
+    if nsis_path:
+        return create_nsis_installer(nsis_path)
+
+    print("No installer tool found.")
+    print("  - Install Inno Setup from https://jrsoftware.org/isinfo.php")
+    print("  - Or install NSIS from https://nsis.sourceforge.io/")
+    print("Skipping installer creation.")
+
+
+def create_inno_installer(iscc_path):
+    """Create installer using Inno Setup."""
+    print(f"Using Inno Setup: {iscc_path}")
+
+    iss_file = ROOT_DIR / "installer.iss"
+    if not iss_file.exists():
+        print(f"Inno Setup script not found: {iss_file}")
         return
+
+    # Run Inno Setup compiler
+    result = subprocess.run([iscc_path, str(iss_file)], cwd=ROOT_DIR)
+
+    if result.returncode == 0:
+        print(f"Installer created: dist/{APP_NAME}-{APP_VERSION}-setup.exe")
+    else:
+        print("Installer creation failed")
+
+
+def create_nsis_installer(nsis_path):
+    """Create installer using NSIS."""
+    print(f"Using NSIS: {nsis_path}")
 
     # Create NSIS script
     nsis_script = f"""
