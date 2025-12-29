@@ -228,8 +228,15 @@ def run():
        there's no console to see error messages)
     """
     # Set up crash logging early, before any imports that might fail
-    crash_log_path = _setup_crash_logging()
-    logger = logging.getLogger(__name__)
+    # Use try/except in case logging setup itself fails
+    crash_log_path = None
+    logger = None
+    try:
+        crash_log_path = _setup_crash_logging()
+        logger = logging.getLogger(__name__)
+    except Exception:
+        # If we can't set up logging, continue anyway - we'll still try to show dialogs
+        pass
 
     try:
         # Set up package path before any voice_replacer imports
@@ -237,15 +244,45 @@ def run():
 
         return main()
 
+    except SystemExit as e:
+        # SystemExit is normal (e.g., from argparse --help or sys.exit(0))
+        # Only log/show error if exit code is non-zero
+        if e.code and e.code != 0:
+            if logger:
+                logger.error(f"Application exited with code {e.code}")
+        raise  # Re-raise to propagate exit code
+
+    except KeyboardInterrupt:
+        # Normal user interrupt
+        if logger:
+            logger.info("Application interrupted by user")
+        return 0
+
     except Exception as e:
         # Log the full traceback
         error_msg = traceback.format_exc()
-        logger.critical(f"Unhandled exception: {error_msg}")
+        if logger:
+            logger.critical(f"Unhandled exception: {error_msg}")
 
         # Show error dialog to user (works in windowed mode)
         _show_error_dialog(
             "Voice Replacer - Startup Error",
             f"The application encountered an error and could not start.\n\n"
+            f"Error: {type(e).__name__}: {str(e)}",
+            crash_log_path
+        )
+
+        return 1
+
+    except BaseException as e:
+        # Catch-all for any other exceptions (GeneratorExit, etc.)
+        error_msg = traceback.format_exc()
+        if logger:
+            logger.critical(f"Critical error: {error_msg}")
+
+        _show_error_dialog(
+            "Voice Replacer - Critical Error",
+            f"A critical error occurred.\n\n"
             f"Error: {type(e).__name__}: {str(e)}",
             crash_log_path
         )
