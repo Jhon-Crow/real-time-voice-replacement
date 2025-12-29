@@ -31,8 +31,8 @@ def _setup_package_path():
 # Set up package path before any voice_replacer imports
 _setup_package_path()
 
-from .config import AppConfig
-from .gui import run_gui, run_cli
+from voice_replacer.config import AppConfig
+from voice_replacer.gui import run_gui, run_cli
 
 
 def main():
@@ -78,8 +78,8 @@ def main():
 
     # List devices if requested
     if args.list_devices:
-        from .audio_capture import AudioCapture
-        from .audio_output import AudioOutput
+        from voice_replacer.audio_capture import AudioCapture
+        from voice_replacer.audio_output import AudioOutput
 
         print("\nInput Devices (Microphones):")
         print("-" * 40)
@@ -103,7 +103,7 @@ def main():
 
     # List voices if requested
     if args.list_voices:
-        from .tts import PiperTTS
+        from voice_replacer.tts import PiperTTS
 
         print("\nAvailable Voice Models:")
         print("-" * 40)
