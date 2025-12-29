@@ -5,6 +5,83 @@ import argparse
 import logging
 import sys
 import os
+import traceback
+from pathlib import Path
+
+
+def _get_log_dir():
+    """Get the directory for log files."""
+    if os.name == 'nt':  # Windows
+        base = Path(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')))
+    else:  # Linux/Mac
+        base = Path(os.path.expanduser('~/.local/share'))
+    log_dir = base / 'VoiceReplacer' / 'logs'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir
+
+
+def _setup_crash_logging():
+    """Set up early crash logging before any imports that might fail.
+
+    This ensures that if the application crashes during startup (e.g., due to
+    missing dependencies or DLL issues in PyInstaller builds), we can still
+    capture and log the error for diagnosis.
+    """
+    log_dir = _get_log_dir()
+    crash_log = log_dir / 'crash.log'
+
+    # Set up basic file logging for crashes
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(crash_log, mode='a', encoding='utf-8'),
+        ]
+    )
+    return crash_log
+
+
+def _show_error_dialog(title, message, crash_log_path=None):
+    """Show an error dialog to the user.
+
+    Works in windowed mode (no console) by using tkinter as a fallback
+    if PyQt6 is not available.
+    """
+    details = message
+    if crash_log_path:
+        details += f"\n\nCrash log saved to:\n{crash_log_path}"
+
+    # Try PyQt6 first
+    try:
+        from PyQt6.QtWidgets import QApplication, QMessageBox
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication(sys.argv)
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message[:500] if len(message) > 500 else message)
+        if len(message) > 500 or crash_log_path:
+            msg_box.setDetailedText(details)
+        msg_box.exec()
+        return
+    except Exception:
+        pass
+
+    # Fall back to tkinter
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()  # Hide the main window
+        messagebox.showerror(title, details[:1000])
+        root.destroy()
+        return
+    except Exception:
+        pass
+
+    # Last resort: write to stderr (may not be visible in windowed mode)
+    print(f"{title}: {details}", file=sys.stderr)
 
 
 def _setup_package_path():
@@ -26,13 +103,6 @@ def _setup_package_path():
 
     if base_path not in sys.path:
         sys.path.insert(0, base_path)
-
-
-# Set up package path before any voice_replacer imports
-_setup_package_path()
-
-from voice_replacer.config import AppConfig
-from voice_replacer.gui import run_gui, run_cli
 
 
 def main():
@@ -69,12 +139,30 @@ def main():
 
     args = parser.parse_args()
 
-    # Set up logging
+    # Set up logging (reconfigure with user preferences)
     log_level = logging.DEBUG if args.debug else logging.INFO
+    log_dir = _get_log_dir()
+
+    # Clear existing handlers and reconfigure
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
     logging.basicConfig(
         level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_dir / 'app.log', mode='a', encoding='utf-8'),
+            logging.StreamHandler(sys.stdout),
+        ]
     )
+
+    logger = logging.getLogger(__name__)
+    logger.info("Voice Replacer starting...")
+
+    # Import voice_replacer modules after path setup
+    from voice_replacer.config import AppConfig
+    from voice_replacer.gui import run_gui, run_cli
 
     # List devices if requested
     if args.list_devices:
@@ -130,5 +218,40 @@ def main():
         return run_gui(config)
 
 
+def run():
+    """
+    Entry point wrapper with global exception handling.
+
+    This function wraps main() to catch any unhandled exceptions and:
+    1. Log them to a crash log file
+    2. Show an error dialog to the user (important for windowed mode where
+       there's no console to see error messages)
+    """
+    # Set up crash logging early, before any imports that might fail
+    crash_log_path = _setup_crash_logging()
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Set up package path before any voice_replacer imports
+        _setup_package_path()
+
+        return main()
+
+    except Exception as e:
+        # Log the full traceback
+        error_msg = traceback.format_exc()
+        logger.critical(f"Unhandled exception: {error_msg}")
+
+        # Show error dialog to user (works in windowed mode)
+        _show_error_dialog(
+            "Voice Replacer - Startup Error",
+            f"The application encountered an error and could not start.\n\n"
+            f"Error: {type(e).__name__}: {str(e)}",
+            crash_log_path
+        )
+
+        return 1
+
+
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(run())
