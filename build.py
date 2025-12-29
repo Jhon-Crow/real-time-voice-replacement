@@ -128,7 +128,7 @@ def build_exe():
         f"--runtime-hook={HOOKS_DIR / 'rthook_voice_replacer.py'}",
         # Exclude unnecessary modules to reduce size
         "--exclude-module=matplotlib",
-        "--exclude-module=tkinter",
+        # Note: tkinter is needed as fallback for error dialogs if PyQt6 fails
         "--exclude-module=PIL",
         "--exclude-module=cv2",
     ]
